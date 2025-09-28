@@ -24,6 +24,7 @@ import {
   type WorkflowState,
 } from "../../utils/linear.ts"
 import { startWorkOnIssue } from "../../utils/actions.ts"
+import { getOption } from "../../config.ts"
 
 type IssueLabel = { id: string; name: string; color: string }
 
@@ -412,6 +413,7 @@ async function promptInteractiveIssueCreation(
   }
 
   // Ask about starting work (always show this)
+  const defaultStartOnCreate = getOption("default_start_on_create") ?? false
   const start = await Select.prompt({
     message:
       "Start working on this issue now? (creates branch and updates status)",
@@ -419,7 +421,7 @@ async function promptInteractiveIssueCreation(
       { name: "No", value: false },
       { name: "Yes", value: true },
     ],
-    default: false,
+    default: defaultStartOnCreate,
   })
 
   return {
@@ -644,11 +646,13 @@ export const createCommand = new Command()
           console.error(`Could not determine team ID for team ${team}`)
           Deno.exit(1)
         }
-        if (start && assignee === undefined) {
+        // Use configuration default if --start flag was not explicitly provided
+        const shouldStartForAssignee = start !== undefined ? start : (getOption("default_start_on_create") ?? false)
+        if (shouldStartForAssignee && assignee === undefined) {
           assignee = "self"
         }
-        if (start && assignee !== undefined && assignee !== "self") {
-          console.error("Cannot use --start and a non-self --assignee")
+        if (shouldStartForAssignee && assignee !== undefined && assignee !== "self") {
+          console.error("Cannot start work and assign to a non-self assignee")
         }
         let stateId: string | undefined
         if (state) {
@@ -787,7 +791,9 @@ export const createCommand = new Command()
         spinner?.stop()
         console.log(issue.url)
 
-        if (start) {
+        // Use configuration default if --start flag was not explicitly provided
+        const shouldStartForWork = start !== undefined ? start : (getOption("default_start_on_create") ?? false)
+        if (shouldStartForWork) {
           await startWorkOnIssue(issueId, issue.team.key)
         }
       } catch (error) {

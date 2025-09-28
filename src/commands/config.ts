@@ -86,9 +86,20 @@ export const configCommand = new Command()
           { name: "priority", value: "priority" },
         ],
       },
+      {
+        name: "defaultStartOnCreate",
+        message: "Should 'create' command default to starting work on new issues?",
+        type: Select,
+        options: [
+          { name: "No", value: "false" },
+          { name: "Yes", value: "true" },
+        ],
+        default: "false",
+      },
     ])
     const teamKey = team.key
     const sortChoice = responses.sort
+    const defaultStartOnCreateChoice = responses.defaultStartOnCreate === "true"
 
     // Determine file path for .linear.toml: prefer git root .config dir, then git root, then cwd.
     let filePath: string
@@ -114,6 +125,7 @@ export const configCommand = new Command()
 workspace = "${workspace}"
 team_id = "${teamKey}"
 issue_sort = "${sortChoice}"
+default_start_on_create = ${defaultStartOnCreateChoice}
 `
 
     await Deno.writeTextFile(filePath, tomlContent)
