@@ -76,9 +76,79 @@ export async function openTeamAssigneeView(options: { app?: boolean } = {}) {
     "and": [{ "assignee": { "or": [{ "isMe": { "eq": true } }] } }],
   }
   const filter = encodeBase64(JSON.stringify(filterObj)).replace(/=/g, "")
-  const url =
+    const url =
     `https://linear.app/${workspace}/team/${teamId}/active?filter=${filter}`
   await open(url, options.app ? { app: { name: "Linear" } } : undefined)
+}
+
+async function checkoutBranch(branchName: string, preferGraphite: boolean): Promise<boolean> {
+  if (preferGraphite) {
+    const process = new Deno.Command("gt", {
+      args: ["checkout", branchName],
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    })
+    const status = await process.spawn().status
+    if (status.success) {
+      console.log(`✓ Switched to '${branchName}' using Graphite`)
+      return true
+    }
+    return false
+  } else {
+    const process = new Deno.Command("git", {
+      args: ["checkout", branchName],
+    })
+    const { success } = await process.output()
+    if (success) {
+      console.log(`✓ Switched to '${branchName}'`)
+      return true
+    }
+    return false
+  }
+}
+
+async function createBranch(
+  branchName: string,
+  preferGraphite: boolean,
+  gitSourceRef?: string
+): Promise<boolean> {
+  if (preferGraphite) {
+    const process = new Deno.Command("gt", {
+      args: ["create", branchName],
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    })
+    const status = await process.spawn().status
+    if (status.success) {
+      console.log(
+        `✓ Created and switched to branch '${branchName}' using Graphite`
+      )
+      return true
+    }
+    return false
+  } else {
+    const process = new Deno.Command("git", {
+      args: ["checkout", "-b", branchName, gitSourceRef || "HEAD"],
+    })
+    const { success } = await process.output()
+    if (success) {
+      console.log(`✓ Created and switched to branch '${branchName}'`)
+      return true
+    }
+    return false
+  }
+}
+
+async function findAvailableBranchName(baseName: string): Promise<string> {
+  let suffix = 1
+  let newBranch = `${baseName}-${suffix}`
+  while (await branchExists(newBranch)) {
+    suffix++
+    newBranch = `${baseName}-${suffix}`
+  }
+  return newBranch
 }
 
 export async function startWorkOnIssue(
@@ -87,8 +157,11 @@ export async function startWorkOnIssue(
   gitSourceRef?: string,
 ) {
   const { branchName } = await fetchIssueDetails(issueId, true)
+  const preferGraphite = getOption("prefer_graphite") === "true"
 
-  // Check if branch exists
+  // Handle branch creation/switching logic
+  let branchOperationSucceeded = false
+  
   if (await branchExists(branchName)) {
     const answer = await Select.prompt({
       message:
@@ -100,45 +173,29 @@ export async function startWorkOnIssue(
     })
 
     if (answer === "switch") {
-      const process = new Deno.Command("git", {
-        args: ["checkout", branchName],
-      })
-      await process.output()
-      console.log(`✓ Switched to '${branchName}'`)
+      branchOperationSucceeded = await checkoutBranch(branchName, preferGraphite)
     } else {
-      // Find next available suffix
-      let suffix = 1
-      let newBranch = `${branchName}-${suffix}`
-      while (await branchExists(newBranch)) {
-        suffix++
-        newBranch = `${branchName}-${suffix}`
-      }
-
-      const process = new Deno.Command("git", {
-        args: ["checkout", "-b", newBranch, gitSourceRef || "HEAD"],
-      })
-      await process.output()
-      console.log(`✓ Created and switched to branch '${newBranch}'`)
+      const newBranch = await findAvailableBranchName(branchName)
+      branchOperationSucceeded = await createBranch(newBranch, preferGraphite, gitSourceRef)
     }
   } else {
-    // Create and checkout the branch
-    const process = new Deno.Command("git", {
-      args: ["checkout", "-b", branchName, gitSourceRef || "HEAD"],
-    })
-    await process.output()
-    console.log(`✓ Created and switched to branch '${branchName}'`)
+    branchOperationSucceeded = await createBranch(branchName, preferGraphite, gitSourceRef)
   }
 
-  // Update issue state
-  try {
-    const state = await getStartedState(teamId)
-    if (!issueId) {
-      console.error("No issue ID resolved")
-      Deno.exit(1)
+  // Only update issue state if branch operations succeeded
+  if (branchOperationSucceeded) {
+    try {
+      const state = await getStartedState(teamId)
+      if (!issueId) {
+        console.error("No issue ID resolved")
+        Deno.exit(1)
+      }
+      await updateIssueState(issueId, state.id)
+      console.log(`✓ Issue state updated to '${state.name}'`)
+    } catch (error) {
+      console.error("Failed to update issue state:", error)
     }
-    await updateIssueState(issueId, state.id)
-    console.log(`✓ Issue state updated to '${state.name}'`)
-  } catch (error) {
-    console.error("Failed to update issue state:", error)
+  } else {
+    console.log("Branch operation failed - issue state not updated")
   }
 }

@@ -86,9 +86,20 @@ export const configCommand = new Command()
           { name: "priority", value: "priority" },
         ],
       },
+      {
+        name: "preferGraphite",
+        message: "Prefer Graphite CLI for creating branches?",
+        type: Select,
+        options: [
+          { name: "Yes", value: "true" },
+          { name: "No", value: "false" },
+        ],
+        default: "false",
+      },
     ])
     const teamKey = team.key
     const sortChoice = responses.sort
+    const preferGraphite = responses.preferGraphite
 
     // Determine file path for .linear.toml: prefer git root .config dir, then git root, then cwd.
     let filePath: string
@@ -114,6 +125,7 @@ export const configCommand = new Command()
 workspace = "${workspace}"
 team_id = "${teamKey}"
 issue_sort = "${sortChoice}"
+prefer_graphite = "${preferGraphite}"
 `
 
     await Deno.writeTextFile(filePath, tomlContent)
