@@ -8,6 +8,45 @@ import {
 } from "../../utils/linear.ts"
 import { startWorkOnIssue as startIssue } from "../../utils/actions.ts"
 
+async function selectIssueFromList(
+  teamId: string,
+  unassigned?: boolean,
+  allAssignees?: boolean,
+): Promise<string> {
+  try {
+    const result = await fetchIssuesForState(
+      teamId,
+      ["unstarted"],
+      undefined,
+      unassigned,
+      allAssignees,
+    )
+    const issues = result.issues?.nodes || []
+
+    if (issues.length === 0) {
+      console.error("No unstarted issues found.")
+      Deno.exit(1)
+    }
+
+    const answer = await Select.prompt({
+      message: "Select an issue to start:",
+      search: true,
+      searchLabel: "Search issues",
+      options: issues.map((
+        issue: { identifier: string; title: string; priority: number },
+      ) => ({
+        name: getPriorityDisplay(issue.priority) +
+          ` ${issue.identifier}: ${issue.title}`,
+        value: issue.identifier,
+      })),
+    })
+    return answer as string
+  } catch (error) {
+    console.error("Failed to fetch issues:", error)
+    Deno.exit(1)
+  }
+}
+
 export const startCommand = new Command()
   .name("start")
   .description("Start working on an issue")
@@ -39,38 +78,22 @@ export const startCommand = new Command()
 
     let resolvedId = await getIssueIdentifier(issueId)
     if (!resolvedId) {
-      try {
-        const result = await fetchIssuesForState(
-          teamId,
-          ["unstarted"],
-          undefined,
-          unassigned,
-          allAssignees,
-        )
-        const issues = result.issues?.nodes || []
-
-        if (issues.length === 0) {
-          console.error("No unstarted issues found.")
-          Deno.exit(1)
-        }
-
-        const answer = await Select.prompt({
-          message: "Select an issue to start:",
-          search: true,
-          searchLabel: "Search issues",
-          options: issues.map((
-            issue: { identifier: string; title: string; priority: number },
-          ) => ({
-            name: getPriorityDisplay(issue.priority) +
-              ` ${issue.identifier}: ${issue.title}`,
-            value: issue.identifier,
-          })),
-        })
-
-        resolvedId = answer as string
-      } catch (error) {
-        console.error("Failed to fetch issues:", error)
-        Deno.exit(1)
+      // No issue ID provided and none found in branch, show issue selection
+      resolvedId = await selectIssueFromList(teamId, unassigned, allAssignees)
+    } else if (issueId === undefined) {
+      // Issue was resolved from branch identifier, show confirmation prompt
+      const answer = await Select.prompt({
+        message: `Current branch resolves to issue ${resolvedId}. \nStart working on this issue?`,
+        options: [
+          { name: "Yes", value: "yes" },
+          { name: "No", value: "no" },
+        ],
+        default: "yes",
+      })
+      
+      if (answer === "no") {
+        // User chose "No", proceed with existing logic to select an issue
+        resolvedId = await selectIssueFromList(teamId, unassigned, allAssignees)
       }
     }
 
