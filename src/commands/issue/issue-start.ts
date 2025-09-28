@@ -63,7 +63,11 @@ export const startCommand = new Command()
     "-f, --from-ref <fromRef:string>",
     "Git ref to create new branch from",
   )
-  .action(async ({ allAssignees, unassigned, fromRef }, issueId) => {
+  .option(
+    "-c, --current",
+    "Start the issue detected from current branch without confirmation",
+  )
+  .action(async ({ allAssignees, unassigned, fromRef, current }, issueId) => {
     const teamId = getTeamKey()
     if (!teamId) {
       console.error("Could not determine team ID")
@@ -81,19 +85,25 @@ export const startCommand = new Command()
       // No issue ID provided and none found in branch, show issue selection
       resolvedId = await selectIssueFromList(teamId, unassigned, allAssignees)
     } else if (issueId === undefined) {
-      // Issue was resolved from branch identifier, show confirmation prompt
-      const answer = await Select.prompt({
-        message: `Current branch resolves to issue ${resolvedId}. \nStart working on this issue?`,
-        options: [
-          { name: "Yes", value: "yes" },
-          { name: "No", value: "no" },
-        ],
-        default: "yes",
-      })
-      
-      if (answer === "no") {
-        // User chose "No", proceed with existing logic to select an issue
-        resolvedId = await selectIssueFromList(teamId, unassigned, allAssignees)
+      // Issue was resolved from branch identifier
+      if (current) {
+        // --current flag provided, bypass confirmation and start the detected issue
+        console.log(`Starting issue ${resolvedId} detected from current branch...`)
+      } else {
+        // Show confirmation prompt
+        const answer = await Select.prompt({
+          message: `Current branch resolves to issue ${resolvedId}. \nStart working on this issue?`,
+          options: [
+            { name: "Yes", value: "yes" },
+            { name: "No", value: "no" },
+          ],
+          default: "yes",
+        })
+        
+        if (answer === "no") {
+          // User chose "No", proceed with existing logic to select an issue
+          resolvedId = await selectIssueFromList(teamId, unassigned, allAssignees)
+        }
       }
     }
 
