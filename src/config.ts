@@ -79,6 +79,7 @@ export type OptionValueMapping = {
   workspace: string
   issue_sort: "manual" | "priority"
   default_start_on_create: boolean
+  prefer_graphite: "true" | "false"
 }
 
 export type OptionName = keyof OptionValueMapping
