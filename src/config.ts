@@ -78,6 +78,7 @@ export type OptionValueMapping = {
   api_key: string
   workspace: string
   issue_sort: "manual" | "priority"
+  default_start_on_create: boolean
 }
 
 export type OptionName = keyof OptionValueMapping
@@ -88,7 +89,7 @@ export function getOption<T extends OptionName>(
 ): OptionValueMapping[T] | undefined {
   if (cliValue !== undefined) return cliValue as OptionValueMapping[T]
   const fromConfig = config[optionName]
-  if (typeof fromConfig === "string") {
+  if (fromConfig !== undefined) {
     return fromConfig as OptionValueMapping[T]
   }
   return Deno.env.get("LINEAR_" + optionName.toUpperCase()) as
