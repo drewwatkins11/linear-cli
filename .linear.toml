@@ -1,0 +1,8 @@
+# linear cli
+# https://github.com/schpet/linear-cli
+
+default_start_on_create = true
+issue_sort = "manual"
+prefer_graphite = "true"
+team_id = "LIN"
+workspace = "linear-cli-test-dwatkins"
